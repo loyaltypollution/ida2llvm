@@ -1,0 +1,9 @@
+/.env
+*.tar
+/tests
+__pycache__/
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
