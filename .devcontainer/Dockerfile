@@ -15,11 +15,6 @@ RUN apt-get update --fix-missing && \
         wget && \
     rm -rf /var/lib/apt/lists/*
 
-
-USER root
-COPY certs /usr/local/share/ca-certificates/
-RUN update-ca-certificates
-
 # Install wine
 ARG DEBIAN_FRONTEND=noninteractive
 RUN dpkg --add-architecture i386 && \
@@ -27,8 +22,8 @@ RUN dpkg --add-architecture i386 && \
     wget --no-check-certificate --output-document /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
     wget --no-check-certificate -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/debian/dists/bullseye/winehq-bullseye.sources
 
-RUN apt-get update --fix-missing && \
-    apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --fix-missing --no-install-recommends \
         winehq-stable \
         xvfb && \
     rm -rf /var/lib/apt/lists/*
@@ -70,6 +65,8 @@ RUN mkdir ~/.wine/ida && \
 RUN wine reg add "HKEY_CURRENT_USER\Software\Hex-Rays\IDA" /v Python3TargetDLL /t REG_SZ /d "${PYTHON_DIR}/python3.dll" /f && \
     wine reg add "HKEY_CURRENT_USER\Software\Hex-Rays\IDA" /v "License Think-Cell Operations GmbH" /t REG_DWORD /d 1 /f && \
     while inotifywait -e modify ~/.wine/user.reg; do sleep 1; done
+
+# Modify headless_ida to allow tests to go through
 
 RUN mkdir /home/bin2llvm
 WORKDIR /home/bin2llvm

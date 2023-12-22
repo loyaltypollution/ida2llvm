@@ -1,103 +1,75 @@
-## Bin2LLVM
+# IDA2LLVM - Dynamic Binary Lifting IDA code to LLVM IR
 
-Given a source string $C$ and 
-
-## How to Run
-Set up the docker file.
-```
-DISPLAY=:0 PYTHONHOME="C:\\Program Files\\Python310" PYTHONPATH="C:\\Program Files\\Python310" wine ~/.wine/ida/idat64.exe -A -S"./src/core.py" examples/cff.i64 -t
-```
+Because I was curious, "can Hexrays decompilation be hijacked for LLVM lifting"?
 
 
-## IDA Pro Disassembler
-Ilfak Guilfanov gave a presentation at RECON where he explains the architecture of Hex-Rays decompiler. The main point of interest for us is its intermediate representation, called Microcode. At the start of the decompilation, the Microcode is simple and looks like RISC code. 
+## Features
 
-Then, multiple optimization passes are executed, which will make the look of the microcode change. Microcode instructions are condensed and made more complex.
+1. Lifts all IDA-decompilable binaries to LLVM bitcode, including executables and shared libraries for each platform.
+2. **guarantees CFG preservation** during lifting
+3. enable **interactive lifting**, for reverse-engineers most familiar with state-of-the-art IDA
 
-Because microcode instructions are RISC-like, an additional layer of analysis is required to reconstruct high-level C structures such as `for`, `while`, `if`, `switch`. Hexray's has an additional intermediate representation called ctree which further aids final decompilation view.
+TODO: describe visually certain feature sets
 
-### Decompilation view
-Decompilation view is **compilable**, meaning that we can technically compile LLVM IR from the C-based decompilation view.
+## Dependencies
+| Name | Version | 
+| ---- | ------- |
+| [Python](https://www.python.org/) | 3.10* |
+| [llvmlite](https://pypi.org/project/llvmlite/) | 0.39.1* |
+| [headless-ida](https://pypi.org/project/headless-ida/)** | 0.5.2 |
+| [pytest](https://pypi.org/project/pytest/)** | 7.4.3 |
+| [IDA Pro](https://www.hex-rays.com/products/ida) | 7.7+ |
 
-While this is convenient, our tool is better than such an approach as:
-- Hexray's decompilation was never intended for accurate binary lifting but a trivial overview for reverse engineers to view their project.
-- Each decompilation layer adds additional analysis and assumptions onto the IR, continually morphing the IR into a different form.
-  - we skip ctree and clang layer by lifting directly to LLVM IR.
-- During Ctree analysis, CFG are often manipulated for ease of human-reading.
-  - we wish to preserve CFG between binary and lifted IR.
+*llvmlite 0.39.1 did not have wheels for Python 3.11+  
+**only needed for unittests
 
-Notice further that such a naive compilation from Hexray's Decompiler
-- is often unreliable, often facing compilation errors depending on the C compiler used.
-- introduces additional compiler flags to tweak.
+## Using the lifter
 
-## Todo
-This project is still ongoing, our various todos and technical limitations are noted in this section.
+### Run as IDA Plugin
 
-### todo: nested variadic function call
-Given the C code snippet below,
+TODO: expose front-end IDA plugin
 
-```C
-void innervariadic(...) {}
-void outervariadic(arg1, ...) {
-	innervariadic()
-}
+### Run in Docker
+
+This requires an IDA Pro Windows installation.
+
+Our Dockerfile runs Windows IDA Pro in a Linux container, emulating it in Wine. 
+
+#### Step 1: Clone the repository
+
+```pwsh
+git clone https://github.com/loyaltypollution/ida2llvm
 ```
 
-Note that if outervariadic is called with 5 arguments, innervariadic is called with 0 arguments. 
-- IDA defaults to displaying nested variadic functions in the above manner
-- the "issue" here is that variadic function arguments cannot propagate properly from outer to inner function
-  - innervariadic function does not know how many arguments in outervariadic function
-  - we also do not know how many arguments to pass from outervariadic to innervariadic function
-- while this could be expected behaviour, there are situations where we wish for propagation of variadic arguments
-- the typical fix involves va_list forwarding, however the project author is unclear how to perform this in IDA. *happy to receive Github issue for discussion :)*
+#### Step 2: Add `ida.tar` to `.devcontainer/dep`
 
-The current "fix" for this is similar to GoLang languages: simply expand the number of arguments for all variadic arguments by an arbitrarily large number.
-- this way, arguments that are used are correctly passed
-- arguments that are not used are passed, but do not affect program flow
-
-We have future plans to automate the above process into the project's workflow. In the interim, users are advised to expand the number of arguments themselves, by changing the type definition of variadic functions as above.
-
-For instance, `int printf(char *format, ...)` $\rightarrow$ `int printf(char *format, int * a, int *b, int *c, int *d, ...)`
-
-### todo: indirect memory access
-Given the C code snippet below, 
-
-```C
-char a[40] = "hello world";
-char b[20] = "other things";
-
-int main() {
-  int c;
-  scanf("%d", &c);
-  printf("%s", a + c);
-}
+Insert a tar zip of the entire IDA Pro folder 
+```pwsh
+tar cvf ida.tar "$(dirname "$(which ida64)")"
 ```
 
-An address is accessed with an offset. 
-- at compile time, we do not know which memory location is accessed.
-- at run time, `printf` is dependant on the memory layout of program $P$.
-- at binary lift time, 
-  - we do not know which memory location is accessed.
-  - we wish for lifted `printf` to return the same result as program $P$
-- therefore, our lifting code needs to maintain memory layout of the entire program, during **runtime**.
+#### Step 3: Build & Run Dockerfile
 
-### todo: function call from memory access
-It also stands to reason that function calls are difficult to lift. 
-```C
-int main() {
-  int a = 0x1434;
-  (void (*)(void *))a();
-}
-```
-This technique is particularly troublesome as
-- we need to disassemble and decompile at the new function offset, **at runtime**
-  - at runtime, the program space can be modified. 
-- our lifiting code needs to maintain memory layout of the entire program, during **runtime**.
+TODO: expose a front-end in the Dockerfile for convenience purpose.
 
+## Linking Notes
 
-<!-- ### comparision against other binary lifters
-we conclude this section by comparing our various limitations to other state-of-the-art binary lifters. our comparisions are tabulated below
+Suppose the user lifted all functions in the idb. This potentially includes symbols from the C standard library, such as `_start`.
 
-|our project| mcsema|
-|--|--|
-|--|--| -->
+Naievely compiling from `clang` will likely result in link issues. Common issues include:
+- duplicate symbols
+- undefined symbols
+
+In general, link issues are not our concern. Our lifter has already done its work and it's up to the user to fix linking issues *(good luck)*. 
+
+Here are some tips to fix linking issues:
+- instruct the linker to use the first symbol seen (`allow-multiple-definition`)
+    ```bash
+        clang lifted.ll -c
+        clang lifted.o -v -Wl,--allow-multiple-definition -o lifted.out
+    ```
+- cannot link against c++ stdlib*
+    ```bash
+        clang++ lifted.ll
+    ```
+*this solution is obviously superficial, please raise an issue and let the author learn more about cpp linking*
