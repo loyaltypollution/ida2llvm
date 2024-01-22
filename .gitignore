@@ -6,3 +6,5 @@ __pycache__/
 *.id2
 *.nam
 *.til
+tests/ll
+tests/log

@@ -51,12 +51,12 @@ RUN Xvfb :0 -screen 0 1024x768x16 & \
     rm python_installer.exe
 
 # Download python dependencies on Wine-Python
-COPY ./dep/requirements.txt ./requirements.txt
+COPY .devcontainer/dep/requirements.txt ./requirements.txt
 RUN WINEPATH="${PYTHON_DIR}" wine python -m pip install -r requirements.txt && \
     rm -rf requirements.txt
 
 # Copy IDA over
-COPY dep/ida.tar ./ida.tar
+COPY .devcontainer/dep/ida.tar ./ida.tar
 RUN mkdir ~/.wine/ida && \
     tar -x -f ./ida.tar -C ~/.wine/ida && \
     rm -rf ./ida.tar
@@ -70,3 +70,8 @@ RUN wine reg add "HKEY_CURRENT_USER\Software\Hex-Rays\IDA" /v Python3TargetDLL /
 
 RUN mkdir /home/bin2llvm
 WORKDIR /home/bin2llvm
+
+COPY ida2llvm /home/bin2llvm/ida2llvm/
+COPY run.sh /home/bin2llvm/run.sh
+COPY docker_entrypoint.py /home/bin2llvm/docker_entrypoint.py
+ENTRYPOINT ["/home/bin2llvm/run.sh"]

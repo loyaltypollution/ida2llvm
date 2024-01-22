@@ -101,6 +101,8 @@ class IDA2LLVMController(ida_kernwin.action_handler_t):
         self.view.refresh()
 
     def updateFunctionSelected(self, selectName):
+        if selectName == "":
+            return
         current_address, _ = selectName.split(":", maxsplit=1)
         self.current_address = int(current_address, 16)
         current_name = self.resolveName(self.current_address)
@@ -195,8 +197,9 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
         if not self.created:
             return
         self.lifting_settings.setDisabled(self.function_list.currentRow() == -1)
-        self.curr_ea_button.setText(f"{'Redefine' if ida_funcs.get_func(self.controller.screen_ea).start_ea in self.controller.config else 'Add'} function at current address ({'invalid function' if self.controller.isScreenEaInvalid() else hex(self.controller.screen_ea)})")
         self.curr_ea_button.setDisabled(self.controller.isScreenEaInvalid())
+        if not self.controller.isScreenEaInvalid():
+            self.curr_ea_button.setText(f"{'Redefine' if ida_funcs.get_func(self.controller.screen_ea).start_ea in self.controller.config else 'Add'} function at current address ({hex(self.controller.screen_ea)})")
         if self.controller.current_address:
             self.isDeclare.setChecked(self.controller.config[self.controller.current_address])
             self.code_view.setText(self.controller.cache[self.controller.current_address])
@@ -241,7 +244,6 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
         self.function_list.currentTextChanged.connect(self.controller.updateFunctionSelected)
 
     def OnCreate(self, form):
-        self.created = True
         self._twidget = self.GetWidget()
         self.widget = self.FormToPyQtWidget(form)
         layout = QtWidgets.QGridLayout(self.widget)
@@ -267,4 +269,5 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
         layout.addWidget(self.lift_button,          4,   1,        1,        1)
 
         self.widget.setLayout(layout)
+        self.created = True
         self.refresh()

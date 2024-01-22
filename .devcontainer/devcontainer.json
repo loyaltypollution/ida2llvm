@@ -1,6 +1,6 @@
 {
 	"name": "IDA2LLVM",
 	"build": {
-		"dockerfile": "Dockerfile"
+		"dockerfile": "../Dockerfile"
 	}
 }
