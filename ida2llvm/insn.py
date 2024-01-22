@@ -153,7 +153,7 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
                     lltype = ida2llvm.type.lift_tif(mop.type)
                     val = ida2llvm.type.typecast(val, lltype, builder)
                 case _:
-                    lltype = ir.IntType(64)
+                    lltype = ir.IntType(8).as_pointer()
                     val = ida2llvm.type.typecast(val, lltype, builder)
             return val
         case ida_hexrays.mop_h: # auxiliary function number
@@ -250,9 +250,20 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
         case ida_hexrays.m_nop:  # 0x00,  nop    no operation
             return
         case ida_hexrays.m_stx:  # 0x01,  stx  l,    {r=sel, d=off}  store register to memory*F
-            _d = builder.load(d)
-            # l = ida2llvm.type.typecast(l, ir.IntType(l.size), builder)
-            return _store_as(l, _d, blk, builder)
+            if d is None:  # destination does not exist
+                return l
+
+            assert isinstance(d.type, ir.PointerType)
+
+            if isinstance(d.type.pointee, ir.ArrayType):
+                arrtoptr = d.type.pointee.element.as_pointer()
+                d = ida2llvm.type.typecast(d, arrtoptr.as_pointer(), builder, True)
+
+            if isinstance(l.type, ir.VoidType):
+                return
+
+            l = ida2llvm.type.typecast(l, d.type.pointee, builder, True)
+            return builder.store(l, d)
         case ida_hexrays.m_ldx:  # 0x02,  ldx  {l=sel,r=off}, d load    register from memory    *F
             register_size = 8*ida_insn.r.size
             r = ida2llvm.type.typecast(r, ir.IntType(register_size).as_pointer(), builder)
