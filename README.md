@@ -31,12 +31,12 @@ IDA2LLVM will load for any architecture with a Hex-Rays decompiler present. Use 
 
 Lifting is performed at IDA's **function** level (assuming Microcode can be emitted). The viewer will always synchronize against the user's cursor in the disassembly window, indicating whether it can be lifted.
 
+Functions are **recursively added** to children. If `main` calls the function `f` and main is defined, both `main` and `f` will be defined.
+
 ![Function selection](screenshots/selected-function.png)
 
 Having added a function, we can select it in the panel. Here we can: 
-1. unmark function as declare-only
-    - the main gruntwork is done here, providing function definition.
-    - children function are recursively lifted, with declare-only unmarked.
+1. mark function as declare-only
 2. redefine the function
    - lifting is performed on a per-demand basis.
    - if there are changes to decompiler, we should redefine the function.

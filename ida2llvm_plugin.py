@@ -131,7 +131,7 @@ class IDA2LLVMController(ida_kernwin.action_handler_t):
         current_name = self.resolveName(self.current_address)
 
         if self.current_address not in self.config:
-            self.config[self.current_address] = True
+            self.config[self.current_address] = False
             
         self.cache[self.current_address] = self.getLiftedText()
         self.current_address = temp_ea
@@ -209,7 +209,7 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
 
     def create_function_settings(self):
         self.isDeclare = QtWidgets.QCheckBox("Keep function as declare-only")
-        self.isDeclare.setChecked(True)
+        self.isDeclare.setChecked(False)
         self.isDeclare.stateChanged.connect(self.controller.declareCurrentFunction)
         
         self.lifting_settings = QtWidgets.QGroupBox("Lift Settings")
