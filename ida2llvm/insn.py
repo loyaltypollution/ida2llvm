@@ -253,7 +253,7 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
         case ida_hexrays.m_stx:  # 0x01,  stx  l,    {r=sel, d=off}  store register to memory*F
             if d is None:  # destination does not exist
                 return l
-
+            d = ida2llvm._utils.dedereference(d)
             assert isinstance(d.type, ir.PointerType)
 
             if isinstance(d.type.pointee, ir.ArrayType):
