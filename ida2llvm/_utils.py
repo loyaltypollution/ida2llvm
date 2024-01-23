@@ -5,7 +5,7 @@ from llvmlite import ir
 
 logger = logging.getLogger(__name__)
 
-def get_offset_to(arg: ir.Value, off: int = 0) -> ir.Value:
+def get_offset_to(builder: ir.IRBuilder, arg: ir.Value, off: int = 0) -> ir.Value:
     """
     A Value can be indexed relative to some offset.
 
@@ -18,16 +18,16 @@ def get_offset_to(arg: ir.Value, off: int = 0) -> ir.Value:
     """
     match arg:
         case ptr if isinstance(arg.type, ir.PointerType) and isinstance(ptr.type.pointee, ir.ArrayType):
-            builder = ir.IRBuilder(arg.parent)
-            with builder.goto_block(arg.parent):
-                arr = ptr.type.pointee
-                td = llvm.create_target_data("e")
-                size = arr.element.get_abi_size(td)
-                return builder.gep(ptr, (ir.Constant(ir.IntType(8), 0), ir.Constant(ir.IntType(8), off // size),))
+            arr = ptr.type.pointee
+            td = llvm.create_target_data("e")
+            size = arr.element.get_abi_size(td)
+            return builder.gep(ptr, (ir.Constant(ir.IntType(8), 0), ir.Constant(ir.IntType(8), off // size),))
         case ptr if isinstance(arg.type, ir.PointerType) and isinstance(ptr.type.pointee, ir.LiteralStructType):
-            builder = ir.IRBuilder(arg.parent)
-            with builder.goto_block(arg.parent):
-                return builder.bitcast(ptr, ir.IntType(8).as_pointer())
+            return builder.bitcast(ptr, ir.IntType(8).as_pointer())
+        case ptr if isinstance(arg.type, ir.PointerType) and off > 0:
+            td = llvm.create_target_data("e")
+            size = ptr.type.pointee.get_abi_size(td)
+            return builder.gep(ptr, (ir.Constant(ir.IntType(8), off // size),))
         case _:
             return arg
 

@@ -64,11 +64,12 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
                     func.lvars[name] = builder.alloca(ida2llvm.type.lift_tif(lvar.tif), name = name)
 
             llvm_arg = func.lvars[name]
-            llvm_arg = ida2llvm._utils.get_offset_to(llvm_arg, off)
 
             if lvar.width != mop.size and mop.size != -1:
                 mop_type = ir.IntType(mop.size * 8).as_pointer()
                 llvm_arg = ida2llvm.type.typecast(llvm_arg, mop_type, builder)
+
+            llvm_arg = ida2llvm._utils.get_offset_to(builder, llvm_arg, off)
             return builder.load(llvm_arg)
         case ida_hexrays.mop_S: # stack variables
             pass
