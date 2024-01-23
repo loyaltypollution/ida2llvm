@@ -1,3 +1,4 @@
+import ida_idaapi
 import ida_funcs
 import ida_hexrays
 import ida_typeinf
@@ -55,8 +56,10 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
             off = lvar_ref.off
 
             if not lvar.has_user_type:
-                pass
-                # logger.warn(f"{name} is not of user defined type, may cause issues")
+                ulvars = lvar_ref.mba.vars
+                ulvar = ulvars.at(lvar_ref.idx)
+                lvar.set_final_lvar_type(ulvar.tif)
+                lvar.set_user_type()
 
             func = blk.parent
             if name not in func.lvars:
@@ -95,7 +98,7 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
                     case 16:
                         tif.create_simple_type(ida_typeinf.BT_UNK_OWORD)
                     case _:
-                        size = mop.size if mop.size > 0 else 100
+                        size = mop.size if mop.size > 0 else 1000
                         onebyte_tif = ida_typeinf.tinfo_t()
                         onebyte_tif.create_simple_type(ida_typeinf.BT_UNK_BYTE)
                         tif.create_array(onebyte_tif, size, 0, ida_typeinf.BT_ARRAY)
@@ -108,6 +111,13 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
                         return g
                     if func.is_funcptr():
                         tif = tif.get_ptrarr_object()
+                    # if function is a thunk function, define the actual function instead
+                    if ida_funcs.get_func(ea).flags & ida_funcs.FUNC_THUNK: 
+                        tfunc_ea, ptr = ida_funcs.calc_thunk_func_target(ida_funcs.get_func(ea))
+                        if tfunc_ea != ida_idaapi.BADADDR:
+                            ea = tfunc_ea
+                            name = ida_name.get_name(ea)
+                    
                     # if no function definition,
                     if ((ida_funcs.get_func(ea) is None)
                     # or if the function is a library function,
@@ -115,7 +125,7 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
                     # or if the function is declared in a XTRN segment,
                     or ida_segment.segtype(ea) & ida_segment.SEG_XTRN): 
                         # return function declaration
-                        g = ida2llvm.function.lift_function(blk.parent.parent, name, True, tif)                    
+                        g = ida2llvm.function.lift_function(blk.parent.parent, name, True, tif)
                     else:
                         g = ida2llvm.function.lift_function(blk.parent.parent, name, False, tif)
                     return g
@@ -134,8 +144,7 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
         case ida_hexrays.mop_f: # function call information
             mcallinfo = mop.f
             f_args = []
-            if mcallinfo.get_type().is_vararg_cc():
-                logger.warning(f"variadic function argument lifting assumes correct number of operands in decompiler")
+
             for arg in mcallinfo.args:
                 typ = ida2llvm.type.lift_tif(arg.type)
                 f_arg = lift_mop(arg, blk, builder)
@@ -476,12 +485,22 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
         case ida_hexrays.m_goto:  # 0x37,  goto   l    l is mop_v or mop_b
             return builder.branch(l)
         case ida_hexrays.m_call:  # 0x38,  call   ld   l is mop_v or mop_b or mop_h
+            args = list(d)
+            for (i, llvmtype) in enumerate(l.type.pointee.args):
+                args[i] = ida2llvm.type.typecast(args[i], llvmtype, builder)
+            
+            if l.type.pointee.var_arg: # function is variadic
+                function = blk.parent
+                if "ArgList" in function.lvars:
+                    logger.warning("nested variadic function detected, variadic arguments will not be passed properly")
+                ltype = l.type.pointee
+                newargs = list(ltype.args)
+                for i in range(len(newargs), len(args)):
+                    newargs.append(args[i].type)
+                new_func_type = ir.FunctionType(ltype.return_type, newargs, var_arg=True).as_pointer()
+                l = ida2llvm.type.typecast(l, new_func_type, builder)
             logger.debug(f"lifting call: {l.type} {d}")
-            convertedArgs = []
-            for (arg, llvmtype) in zip(d, l.type.pointee.args):
-                convertedArg = ida2llvm.type.typecast(arg, llvmtype, builder)
-                convertedArgs.append(convertedArg)
-            return builder.call(l, convertedArgs)
+            return builder.call(l, args)
         case ida_hexrays.m_icall:  # 0x39,  icall  {l=sel, r=off} d    indirect call
             ftype = ir.FunctionType(ir.IntType(8).as_pointer(), (arg.type for arg in d))
             f = ida2llvm.type.typecast(r, ftype.as_pointer(), builder)

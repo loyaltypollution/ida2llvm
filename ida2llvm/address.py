@@ -87,7 +87,7 @@ def _lift_from_address(module: ir.Module, ea: int, typ: ir.Type):
                     ptr = builder.alloca(ir.IntType(8).as_pointer(), name = "ArgList")
                     res.lvars["ArgList"] = ptr
                     va_start = module.declare_intrinsic('llvm.va_start', fnty=ir.FunctionType(ir.VoidType(), [ir.IntType(8).as_pointer()]))
-                    ptr = builder.bitcast(ptr, ir.IntType(8).as_pointer())
+                    ptr = builder.load(ptr)
                     builder.call(va_start, (ptr, ))
 
                 # store stack variables
@@ -114,6 +114,14 @@ def _lift_from_address(module: ir.Module, ea: int, typ: ir.Type):
                 if not blk.is_terminated and index + 1 < len(res.blocks):
                     with builder.goto_block(blk):
                         builder.branch(res.blocks[index + 1])
+
+            # if function is variadic, declare va_end intrinsic
+            if tif.is_vararg_cc() and typ.var_arg:
+                ptr = res.lvars["ArgList"]
+                va_end = module.declare_intrinsic('llvm.va_end', fnty=ir.FunctionType(ir.VoidType(), [ir.IntType(8).as_pointer()]))
+                with builder.goto_block(res.blocks[-1]):
+                    ptr = builder.load(ptr)
+                    builder.call(va_end, (ptr, ))
 
             return res
 
