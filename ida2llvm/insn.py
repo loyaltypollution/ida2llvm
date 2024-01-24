@@ -407,75 +407,115 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
         case ida_hexrays.m_setp:  # 0x1F,  setp  l,  r, d=byte  PF=1Unordered/Parity  *F
             pass
         case ida_hexrays.m_setnz:  # 0x20,  setnz l,  r, d=byte  ZF=0Not Equal    *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("!=", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setz:  # 0x21,  setz  l,  r, d=byte  ZF=1Equal   *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("==", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setae:  # 0x22,  setae l,  r, d=byte  CF=0Above or Equal    *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned(">=", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setb:  # 0x23,  setb  l,  r, d=byte  CF=1Below   *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("<", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_seta:  # 0x24,  seta  l,  r, d=byte  CF=0 & ZF=0   Above   *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned(">", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setbe:  # 0x25,  setbe l,  r, d=byte  CF=1 | ZF=1   Below or Equal    *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("<=", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setg:  # 0x26,  setg  l,  r, d=byte  SF=OF & ZF=0  Greater
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed(">", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setge:  # 0x27,  setge l,  r, d=byte  SF=OF    Greater or Equal
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed(">=", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setl:  # 0x28,  setl  l,  r, d=byte  SF!=OF   Less
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed("<", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_setle:  # 0x29,  setle l,  r, d=byte  SF!=OF | ZF=1 Less or Equal
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed("<=", l, r)
             result = builder.select(cond, ir.IntType(1)(1), ir.IntType(1)(0))
             return _store_as(result, d, blk, builder)
         case ida_hexrays.m_jcnd:  # 0x2A,  jcnd   l,    d   d is mop_v or mop_b
             return builder.cbranch(l, d, next_blk)
         case ida_hexrays.m_jnz:  # 0x2B,  jnz    l, r, d   ZF=0Not Equal *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("!=", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jz:  # 0x2C,  jzl, r, d   ZF=1Equal*F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("==", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jae:  # 0x2D,  jae    l, r, d   CF=0Above or Equal *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned(">=", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jb:  # 0x2E,  jbl, r, d   CF=1Below*F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("<", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_ja:  # 0x2F,  jal, r, d   CF=0 & ZF=0   Above*F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned(">", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jbe:  # 0x30,  jbe    l, r, d   CF=1 | ZF=1   Below or Equal *F
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_unsigned("<=", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jg:  # 0x31,  jgl, r, d   SF=OF & ZF=0  Greater
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed(">", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jge:  # 0x32,  jge    l, r, d   SF=OF    Greater or Equal
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed(">=", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jl:  # 0x33,  jll, r, d   SF!=OF   Less
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed("<", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jle:  # 0x34,  jle    l, r, d   SF!=OF | ZF=1 Less or Equal
+            l = ida2llvm.type.typecast(l, ir.IntType(64), builder)
+            r = ida2llvm.type.typecast(r, ir.IntType(64), builder)
             cond = builder.icmp_signed("<=", l, r)
             return builder.cbranch(cond, d, next_blk)
         case ida_hexrays.m_jtbl:  # 0x35,  jtbl   l, r=mcases    Table jump
