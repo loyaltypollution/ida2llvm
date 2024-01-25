@@ -275,8 +275,9 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
             l = ida2llvm.type.typecast(l, d.type.pointee, builder, True)
             return builder.store(l, d)
         case ida_hexrays.m_ldx:  # 0x02,  ldx  {l=sel,r=off}, d load    register from memory    *F
-            register_size = 8*ida_insn.r.size
-            r = ida2llvm.type.typecast(r, ir.IntType(register_size).as_pointer(), builder)
+            if not isinstance(r.type, ir.PointerType):
+                register_size = 8*ida_insn.r.size
+                r = ida2llvm.type.typecast(r, ir.IntType(register_size).as_pointer(), builder)    
             r = builder.load(r)
 
             return _store_as(r, d, blk, builder)
