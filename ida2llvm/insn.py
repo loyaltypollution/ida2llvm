@@ -539,7 +539,7 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
                 for i in range(len(newargs), len(args)):
                     newargs.append(args[i].type)
                 new_func_type = ir.FunctionType(ltype.return_type, newargs, var_arg=True).as_pointer()
-                l = ida2llvm.type.typecast(l, new_func_type, builder)
+                # l = ida2llvm.type.typecast(l, new_func_type, builder)
             logger.debug(f"lifting call: {l.type} {d}")
             return builder.call(l, args)
         case ida_hexrays.m_icall:  # 0x39,  icall  {l=sel, r=off} d    indirect call
