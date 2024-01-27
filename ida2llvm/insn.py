@@ -262,16 +262,16 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
         case ida_hexrays.m_stx:  # 0x01,  stx  l,    {r=sel, d=off}  store register to memory*F
             if d is None:  # destination does not exist
                 return l
-            d = ida2llvm._utils.dedereference(d)
-            assert isinstance(d.type, ir.PointerType)
-
-            if isinstance(d.type.pointee, ir.ArrayType):
-                arrtoptr = d.type.pointee.element.as_pointer()
-                d = ida2llvm.type.typecast(d, arrtoptr.as_pointer(), builder, True)
-
             if isinstance(l.type, ir.VoidType):
                 return
 
+            if isinstance(d.type, ir.ArrayType):
+                arrtoptr = d.type.element.as_pointer()
+                d = ida2llvm.type.typecast(d, arrtoptr, builder, True)
+            elif isinstance(d.type, ir.IntType):
+                d = builder.inttoptr(d, l.type.as_pointer())
+
+            assert isinstance(d.type, ir.PointerType)
             l = ida2llvm.type.typecast(l, d.type.pointee, builder, True)
             return builder.store(l, d)
         case ida_hexrays.m_ldx:  # 0x02,  ldx  {l=sel,r=off}, d load    register from memory    *F
