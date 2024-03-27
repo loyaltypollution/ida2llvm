@@ -112,7 +112,8 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
                     if func.is_funcptr():
                         tif = tif.get_ptrarr_object()
                     # if function is a thunk function, define the actual function instead
-                    if ida_funcs.get_func(ea).flags & ida_funcs.FUNC_THUNK: 
+                    if ((ida_funcs.get_func(ea) is not None)
+                    and (ida_funcs.get_func(ea).flags & ida_funcs.FUNC_THUNK)): 
                         tfunc_ea, ptr = ida_funcs.calc_thunk_func_target(ida_funcs.get_func(ea))
                         if tfunc_ea != ida_idaapi.BADADDR:
                             ea = tfunc_ea
@@ -144,14 +145,17 @@ def lift_mop(mop: ida_hexrays.mop_t, blk: ir.Block, builder: ir.IRBuilder) -> ir
         case ida_hexrays.mop_f: # function call information
             mcallinfo = mop.f
             f_args = []
-
+            f_ret = []
+            for i in range(mcallinfo.retregs.size()):
+                mopt = mcallinfo.retregs.at(i)
+                f_ret.append(lift_mop(mopt, blk, builder))
             for arg in mcallinfo.args:
                 typ = ida2llvm.type.lift_tif(arg.type)
                 f_arg = lift_mop(arg, blk, builder)
                 f_arg = ida2llvm.type.typecast(f_arg, typ, builder)
                 logger.debug(f"{f_arg} ({f_arg.type}) lifted from {arg} ({typ})")
                 f_args.append(f_arg)
-            return f_args
+            return f_ret,f_args
         case ida_hexrays.mop_a: # operating number address (mop_l\mop_v\mop_S\mop_r)
             mop_addr = mop.a
             val = ida2llvm._utils.dedereference(lift_mop(mop_addr, blk, builder))
@@ -287,7 +291,6 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
             return _store_as(l, d, blk, builder)
         case ida_hexrays.m_neg:  # 0x05,  neg  l, d   negate
             l = builder.neg(l)
-            l = builder.load(l)
             return _store_as(l, d, blk, builder)
         case ida_hexrays.m_lnot:  # 0x06,  lnot l, d   logical not
             assert isinstance(l.type, ir.IntType)
@@ -383,7 +386,7 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
             return _store_as(math, d, blk, builder)
         case ida_hexrays.m_shr:  # 0x17,  shr  l,   r, d   shift logical right
             r = ida2llvm.type.typecast(r, l.type, builder)
-            math = builder.shr(l, r)
+            math = builder.ashr(l, r)
             return _store_as(math, d, blk, builder)
         case ida_hexrays.m_sar:  # 0x18,  sar  l,   r, d   shift arithmetic right
             r = ida2llvm.type.typecast(r, l.type, builder)
@@ -526,7 +529,7 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
         case ida_hexrays.m_goto:  # 0x37,  goto   l    l is mop_v or mop_b
             return builder.branch(l)
         case ida_hexrays.m_call:  # 0x38,  call   ld   l is mop_v or mop_b or mop_h
-            args = list(d)
+            rets, args = d
             for (i, llvmtype) in enumerate(l.type.pointee.args):
                 args[i] = ida2llvm.type.typecast(args[i], llvmtype, builder)
             
@@ -541,7 +544,10 @@ def lift_insn(ida_insn: ida_hexrays.minsn_t, blk: ir.Block, builder: ir.IRBuilde
                 new_func_type = ir.FunctionType(ltype.return_type, newargs, var_arg=True).as_pointer()
                 # l = ida2llvm.type.typecast(l, new_func_type, builder)
             logger.debug(f"lifting call: {l.type} {d}")
-            return builder.call(l, args)
+            ret = builder.call(l, args)
+            for dst in rets:
+                _store_as(ret, dst, blk, builder) 
+            return ret
         case ida_hexrays.m_icall:  # 0x39,  icall  {l=sel, r=off} d    indirect call
             ftype = ir.FunctionType(ir.IntType(8).as_pointer(), (arg.type for arg in d))
             f = ida2llvm.type.typecast(r, ftype.as_pointer(), builder)

@@ -15,6 +15,9 @@ RUN apt-get update --fix-missing && \
         wget && \
     rm -rf /var/lib/apt/lists/*
 
+COPY .devcontainer/certs/ /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+
 # Install wine
 ARG DEBIAN_FRONTEND=noninteractive
 RUN dpkg --add-architecture i386 && \
@@ -22,8 +25,8 @@ RUN dpkg --add-architecture i386 && \
     wget --no-check-certificate --output-document /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
     wget --no-check-certificate -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/debian/dists/bullseye/winehq-bullseye.sources
 
-RUN apt-get update && \
-    apt-get install -y --fix-missing --no-install-recommends \
+RUN apt-get update --fix-missing && \
+    DEBIAN_FRONTEND="noninteractive" apt-get install -y --no-install-recommends \
         winehq-stable \
         xvfb && \
     rm -rf /var/lib/apt/lists/*
@@ -56,17 +59,22 @@ RUN WINEPATH="${PYTHON_DIR}" wine python -m pip install -r requirements.txt && \
     rm -rf requirements.txt
 
 # Copy IDA over
-COPY .devcontainer/dep/ida.tar ./ida.tar
-RUN mkdir ~/.wine/ida && \
-    tar -x -f ./ida.tar -C ~/.wine/ida && \
-    rm -rf ./ida.tar
+ADD .devcontainer/dep/ida.tar ~/.wine/ida
 
 # Accept IDA EUA and set Python's version via registry
 RUN wine reg add "HKEY_CURRENT_USER\Software\Hex-Rays\IDA" /v Python3TargetDLL /t REG_SZ /d "${PYTHON_DIR}/python3.dll" /f && \
     wine reg add "HKEY_CURRENT_USER\Software\Hex-Rays\IDA" /v "License Think-Cell Operations GmbH" /t REG_DWORD /d 1 /f && \
     while inotifywait -e modify ~/.wine/user.reg; do sleep 1; done
 
-# Modify headless_ida to allow tests to go through
+# Install LLVM using pre-built apt.llvm.org packages
+RUN wget -O- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor | sudo tee /usr/share/keyrings/llvm.gpg \
+    && echo """deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-16 main \
+    deb-src http://apt.llvm.org/bullseye/ llvm-toolchain-bullseye-16 main""" >> /etc/apt/sources.list
+ 
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y install --no-install-recommends clang-16 libclang-16-dev llvm-16-dev graphviz \
+    && apt-get -y autoremove \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /home/bin2llvm
 WORKDIR /home/bin2llvm

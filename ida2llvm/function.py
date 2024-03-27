@@ -10,6 +10,27 @@ from contextlib import suppress
 import ida2llvm
 
 logger = logging.getLogger(__name__)
+i8ptr = ir.IntType(8).as_pointer()
+
+def str2size(str_size: str):
+    """
+    Converts a string representing memory size into its size in bits. 
+
+    :param str_size: string describing size
+    :type str_size: str
+    :return: size of string, in bits
+    :rtype: int
+    """
+    match str_size:
+        case "byte":
+            return 8
+        case "word":
+            return 16
+        case "dword":
+            return 32
+        case "qword":
+            return 64
+    raise AssertionError("string size must be one of byte/word/dword/qword")
 
 def lift_intrinsic_function(module: ir.Module, func_name: str):
     """
@@ -35,48 +56,122 @@ def lift_intrinsic_function(module: ir.Module, func_name: str):
     """
     # retrieve intrinsic function if it already exists
     with suppress(KeyError):
-        return module.get_global(f"_h_{func_name}")
+        return module.get_global(func_name)
 
     match func_name:
         case "strcpy":
-            typ = ir.FunctionType(ir.VoidType(), (ir.IntType(8).as_pointer(), ir.IntType(8).as_pointer()))
-            f = ir.Function(module, typ, "_h_strcpy")
-            if f.is_declaration:
-                f.append_basic_block('head')
-                builder = ir.IRBuilder(f.entry_basic_block)
+            typ = ir.FunctionType(ir.VoidType(), (i8ptr, i8ptr))
+            f = ir.Function(module, typ, "strcpy")
+            f.append_basic_block()
+            builder = ir.IRBuilder(f.entry_basic_block)
 
-                memcpy = module.declare_intrinsic('llvm.memcpy', [ir.IntType(8).as_pointer(), ir.IntType(8).as_pointer(), ir.IntType(64)])
+            memcpy = module.declare_intrinsic('llvm.memcpy', [i8ptr, i8ptr, ir.IntType(64)])
 
-                logger.debug("TODO: fix strcpy naieve assumptions")
-                dest, src = f.llvm_f.args
-                length = ir.Constant(ir.IntType(64), 45)
-                volatile = ir.Constant(ir.IntType(1), True)
+            logger.debug("TODO: fix strcpy naieve assumptions")
+            dest, src = f.args
+            length = ir.Constant(ir.IntType(64), 45)
+            volatile = ir.Constant(ir.IntType(1), True)
 
-                builder.call(memcpy, (dest, src, length, volatile))
-                builder.ret_void()
+            builder.call(memcpy, (dest, src, length, volatile))
+            builder.ret_void()
             return f
     
         case "__halt":
             fty = ir.FunctionType(ir.VoidType(), [])
-            f = ir.Function(module, fty, "_h_halt")
-            if f.is_declaration:
-                f.append_basic_block('head')
-                builder = ir.IRBuilder(f.entry_basic_block)
-                builder.asm(fty, "hlt", "", (), True)
-                builder.ret_void()
+            f = ir.Function(module, fty, "__halt")
+            f.append_basic_block()
+            builder = ir.IRBuilder(f.entry_basic_block)
+            builder.asm(fty, "hlt", "", (), True)
+            builder.ret_void()
+            return f
+
+        case func_name if func_name.startswith("__readfs"):
+            _, size = func_name.split("__readfs")
+            size = str2size(size)
+
+            try:
+                fs_reg = module.get_global("virtual_fs")
+            except KeyError:
+                fs_reg_typ = ir.ArrayType(ir.IntType(8), 65536)
+                fs_reg = ir.GlobalVariable(module, fs_reg_typ, "virtual_fs")
+                fs_reg.storage_class = "thread_local"
+                fs_reg.initializer = fs_reg_typ(None)
+            try:
+                threadlocal_f = module.get_global('llvm.threadlocal.address')
+            except KeyError:
+                f_argty = (i8ptr, )
+                fnty = ir.FunctionType(i8ptr, f_argty)
+                threadlocal_f = module.declare_intrinsic('llvm.threadlocal.address', f_argty, fnty)
+
+            fty = ir.FunctionType(ir.IntType(size), [ir.IntType(32),])
+
+            f = ir.Function(module, fty, func_name)
+            offset, = f.args
+            f.append_basic_block()
+            builder = ir.IRBuilder(f.entry_basic_block)
+            fs_reg = ida2llvm.type.typecast(fs_reg, ir.IntType(8).as_pointer(), builder)
+            threadlocal_address = builder.call(threadlocal_f, (fs_reg, ))
+            pointer = builder.gep(threadlocal_address, (offset,))
+            pointer = ida2llvm.type.typecast(pointer, ir.IntType(size).as_pointer(), builder)
+            res = builder.load(pointer)
+            builder.ret(res)
+
+            return f
+
+        case func_name if func_name.startswith("__writefs"):
+            _, size = func_name.split("__writefs")
+            size = str2size(size)
+
+            try:
+                fs_reg = module.get_global("virtual_fs")
+            except KeyError:
+                fs_reg_typ = ir.ArrayType(ir.IntType(8), 65536)
+                fs_reg = ir.GlobalVariable(module, fs_reg_typ, "virtual_fs")
+                fs_reg.storage_class = "thread_local"
+                fs_reg.initializer = fs_reg_typ(None)            
+            try:
+                threadlocal_f = module.get_global('llvm.threadlocal.address')
+            except KeyError:
+                f_argty = (i8ptr, )
+                fnty = ir.FunctionType(i8ptr, f_argty)
+                threadlocal_f = module.declare_intrinsic('llvm.threadlocal.address', f_argty, fnty)
+
+            fty = ir.FunctionType(ir.VoidType(), [ir.IntType(32), ir.IntType(size)])
+
+            f = ir.Function(module, fty, func_name)
+            offset, value  = f.args
+            f.append_basic_block()
+            builder = ir.IRBuilder(f.entry_basic_block)
+            fs_reg = ida2llvm.type.typecast(fs_reg, ir.IntType(8).as_pointer(), builder)
+            threadlocal_address = builder.call(threadlocal_f, (fs_reg, ))
+            pointer = builder.gep(threadlocal_address, (offset,))
+            pointer = ida2llvm.type.typecast(pointer, ir.IntType(size).as_pointer(), builder)
+            builder.store(value, pointer)
+            builder.ret_void()
+
+            return f
+
+        case func_name if func_name.startswith("sys_"):
+            fty = ir.FunctionType(ir.IntType(64), [], var_arg=True)
+            f = ir.Function(module, fty, func_name)
+            return f
+
+        case func_name if func_name.startswith("_InterlockedCompareExchange") or func_name.startswith("_InterlockedExchange"):
+            fty = ir.FunctionType(ir.IntType(64), [], var_arg=True)
+            f = ir.Function(module, fty, func_name)
             return f
 
         # case "memset":
         #     # ida_pro: (dest, src, length)
         #     # llvmintrinsic: (dest, src, length, isvolatile=True)
-        #     typ = ir.FunctionType(ir.VoidType(), (ir.IntType(8).as_pointer(), ir.IntType(8), ir.IntType(64)))
+        #     typ = ir.FunctionType(ir.VoidType(), (i8ptr, ir.IntType(8), ir.IntType(64)))
         #     f = declare_function("_h_memset", typ)
 
         #     if not f.is_defined():
-        #         f.llvm_f.append_basic_block('head')
+        #         f.llvm_f.append_basic_block()
         #         f.builder = ir.IRBuilder(f.llvm_f.entry_basic_block)
 
-        #         memset = module.declare_intrinsic('llvm.memset', [ir.IntType(8).as_pointer(), ir.IntType(64)])
+        #         memset = module.declare_intrinsic('llvm.memset', [i8ptr, ir.IntType(64)])
 
         #         dest, src, length = f.llvm_f.args
         #         volatile = ir.Constant(ir.IntType(1), True)
@@ -91,7 +186,7 @@ def lift_intrinsic_function(module: ir.Module, func_name: str):
         #     f = declare_function("_h_rol8", typ)
 
         #     if not f.is_defined():
-        #         f.llvm_f.append_basic_block('head')
+        #         f.llvm_f.append_basic_block()
         #         f.builder = ir.IRBuilder(f.llvm_f.entry_basic_block)
         #         rol_func_type = ir.FunctionType(ir.IntType(64), (ir.IntType(64), ir.IntType(64), ir.IntType(64)))
         #         rol8 = module.declare_intrinsic('llvm.fshl.i64', [ir.IntType(64), ir.IntType(64), ir.IntType(64)], rol_func_type)
@@ -109,7 +204,7 @@ def lift_intrinsic_function(module: ir.Module, func_name: str):
         #     f = declare_function("_h_byteswap_uint64", typ)
 
         #     if not f.is_defined():
-        #         f.llvm_f.append_basic_block('head')
+        #         f.llvm_f.append_basic_block()
         #         f.builder = ir.IRBuilder(f.llvm_f.entry_basic_block)
         #         byteswap_func_type = ir.FunctionType(ir.IntType(64), (ir.IntType(64),))
         #         byteswap64 = module.declare_intrinsic('llvm.bswap.i64', [ir.IntType(64),], byteswap_func_type)
@@ -126,7 +221,7 @@ def lift_intrinsic_function(module: ir.Module, func_name: str):
         #     f = declare_function("_h_byteswap_uint32", typ)
 
         #     if not f.is_defined():
-        #         f.llvm_f.append_basic_block('head')
+        #         f.llvm_f.append_basic_block()
         #         f.builder = ir.IRBuilder(f.llvm_f.entry_basic_block)
         #         byteswap_func_type = ir.FunctionType(ir.IntType(32), (ir.IntType(32),))
         #         byteswap32 = module.declare_intrinsic('llvm.bswap.i32', [ir.IntType(32),], byteswap_func_type)
