@@ -53,15 +53,34 @@ def _lift_from_address(module: ir.Module, ea: int, typ: ir.Type):
             func_name = ida_name.get_name(ea)
             res = module.get_global(func_name)
             res.lvars = dict()
+            # Ensure Hex-Rays caches are invalidated so recent IDB type edits
+            # are reflected in decompilation and microcode.
+            try:
+                ida_hexrays.mark_cfunc_dirty(func.start_ea)
+            except Exception:
+                pass
+            # Clear global cached cfuncs (broader invalidation when multiple functions edited)
+            try:
+                ida_hexrays.clear_cached_cfuncs()
+            except Exception:
+                pass
 
             ida_hf = ida_hexrays.hexrays_failure_t()
             ida_mbr = ida_hexrays.mba_ranges_t()
             ida_mbr.ranges.push_back(func)
 
-            lvars = ida_hexrays.decompile(func, ida_hf).lvars
-            mba = ida_hexrays.gen_microcode(ida_mbr, ida_hf, None,
-                                            ida_hexrays.DECOMP_ALL_BLKS,
-                                            ida_hexrays.MMAT_LVARS)
+            cfunc = ida_hexrays.decompile(func, ida_hf)
+            lvars = cfunc.lvars if cfunc else []
+            mba = ida_hexrays.gen_microcode(
+                ida_mbr,
+                ida_hf,
+                None,
+                ida_hexrays.DECOMP_ALL_BLKS,
+                ida_hexrays.MMAT_LVARS
+            )
+
+            # Debug: optional dump of microcode instruction at a watched EA.
+            WATCH_EA = getattr(logger, "WATCH_EA", 0x400800)
 
             for index in range(mba.qty):
                 res.append_basic_block(name = f"@{index}") 
@@ -104,7 +123,6 @@ def _lift_from_address(module: ir.Module, ea: int, typ: ir.Type):
             # lift each bblk in cfg
             for index, blk in enumerate(res.blocks):
                 ida_blk = mba.get_mblock(index)
-
                 ida_insn = ida_blk.head
                 while ida_insn is not None:
                     lifted_insn = ida2llvm.insn.lift_insn(ida_insn, blk, builder)
@@ -162,7 +180,7 @@ def _lift_from_address(module: ir.Module, ea: int, typ: ir.Type):
             for el in typ.elements:
                 if isinstance(el, ir.PointerType):
                     address_ea = ida_bytes.get_dword(sub_ea)
-                    if ida_idaapi.get_inf_structure().is_64bit():
+                    if ida_idaapi.inf_is_64bit():
                         address_ea = ida_bytes.get_qword(sub_ea)
                     g_cmt = lift_from_address(module, address_ea, el)
 

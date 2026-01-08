@@ -1,5 +1,6 @@
 import logging
 import llvmlite.binding as llvm
+import ida_name
 
 from llvmlite import ir
 
@@ -51,6 +52,46 @@ def dedereference(arg: ir.Value) -> ir.Value:
             return arg.operands[0]
         case arg if isinstance(arg.type, ir.PointerType):
             return arg
+        case arg if isinstance(arg, ir.Constant) and isinstance(arg.type, ir.IntType):
+            # An integer constant already represents a raw value, not a loaded pointer.
+            # For address-like immediates (e.g., EA 0x1 lifted as i64 1) we simply
+            # return the constant; caller may inttoptr later if pointer semantics needed.
+            return arg
         case _:
             raise NotImplementedError(f"not implemented: get reference for object {arg} of type {arg.type}")
+
+def demangle_name(mangled_name: str) -> tuple[str, str]:
+    """
+    Demangle a function name for display purposes.
+    Returns both the demangled and original mangled names.
+    
+    :param mangled_name: The mangled function name from IDA
+    :type mangled_name: str
+    :return: Tuple of (demangled_name, original_mangled_name)
+    :rtype: tuple[str, str]
+    """
+    # Try to demangle the name
+    demangled = ida_name.demangle_name(mangled_name, 0)
+    
+    # If demangling fails or returns empty, use the original name
+    if not demangled or demangled == "":
+        demangled = mangled_name
+    
+    return demangled, mangled_name
+
+def create_name_comment(demangled_name: str, mangled_name: str) -> str:
+    """
+    Create a comment showing the original mangled name.
+    
+    :param demangled_name: The demangled/display name
+    :type demangled_name: str
+    :param mangled_name: The original mangled name
+    :type mangled_name: str
+    :return: Comment string to add to LLVM IR
+    :rtype: str
+    """
+    # Only add comment if the names differ
+    if demangled_name.strip('"') != mangled_name:
+        return f"; Mangled: {mangled_name}"
+    return ""
 

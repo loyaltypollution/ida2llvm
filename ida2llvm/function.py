@@ -60,20 +60,10 @@ def lift_intrinsic_function(module: ir.Module, func_name: str):
 
     match func_name:
         case "strcpy":
-            typ = ir.FunctionType(ir.VoidType(), (i8ptr, i8ptr))
+            # strcpy cannot be safely implemented without runtime strlen
+            # Mark as external declaration with variadic args to be safe
+            typ = ir.FunctionType(i8ptr, (i8ptr, i8ptr))
             f = ir.Function(module, typ, "strcpy")
-            f.append_basic_block()
-            builder = ir.IRBuilder(f.entry_basic_block)
-
-            memcpy = module.declare_intrinsic('llvm.memcpy', [i8ptr, i8ptr, ir.IntType(64)])
-
-            logger.debug("TODO: fix strcpy naieve assumptions")
-            dest, src = f.args
-            length = ir.Constant(ir.IntType(64), 45)
-            volatile = ir.Constant(ir.IntType(1), True)
-
-            builder.call(memcpy, (dest, src, length, volatile))
-            builder.ret_void()
             return f
     
         case "__halt":

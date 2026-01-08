@@ -5,7 +5,132 @@ import ida_name
 import ida_funcs
 import ida_segment
 
-from PyQt5 import QtCore, QtWidgets, QtGui
+from PySide6 import QtCore, QtWidgets
+from PySide6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
+
+class LLVMSyntaxHighlighter(QSyntaxHighlighter):
+    """
+    Syntax highlighter for LLVM IR.
+    """
+    def __init__(self, document):
+        super().__init__(document)
+        
+        # Define formats
+        self.keyword_format = QTextCharFormat()
+        self.keyword_format.setForeground(QColor(0, 0, 255))  # Blue
+        self.keyword_format.setFontWeight(QFont.Weight.Bold)
+        
+        self.type_format = QTextCharFormat()
+        self.type_format.setForeground(QColor(0, 128, 128))  # Teal
+        
+        self.function_format = QTextCharFormat()
+        self.function_format.setForeground(QColor(128, 0, 128))  # Purple
+        self.function_format.setFontWeight(QFont.Weight.Bold)
+        
+        self.comment_format = QTextCharFormat()
+        self.comment_format.setForeground(QColor(0, 128, 0))  # Green
+        self.comment_format.setFontItalic(True)
+        
+        self.string_format = QTextCharFormat()
+        self.string_format.setForeground(QColor(163, 21, 21))  # Dark red
+        
+        self.number_format = QTextCharFormat()
+        self.number_format.setForeground(QColor(255, 127, 0))  # Orange
+        
+        self.label_format = QTextCharFormat()
+        self.label_format.setForeground(QColor(139, 69, 19))  # Brown
+        self.label_format.setFontWeight(QFont.Weight.Bold)
+        
+        # LLVM keywords
+        self.keywords = [
+            'define', 'declare', 'target', 'datalayout', 'triple', 'ret', 'br',
+            'switch', 'indirectbr', 'invoke', 'resume', 'unreachable', 'add',
+            'fadd', 'sub', 'fsub', 'mul', 'fmul', 'udiv', 'sdiv', 'fdiv',
+            'urem', 'srem', 'frem', 'shl', 'lshr', 'ashr', 'and', 'or', 'xor',
+            'alloca', 'load', 'store', 'getelementptr', 'inbounds', 'trunc',
+            'zext', 'sext', 'fptrunc', 'fpext', 'fptoui', 'fptosi', 'uitofp',
+            'sitofp', 'ptrtoint', 'inttoptr', 'bitcast', 'addrspacecast',
+            'icmp', 'fcmp', 'phi', 'select', 'call', 'va_arg', 'landingpad',
+            'catchpad', 'cleanuppad', 'eq', 'ne', 'ugt', 'uge', 'ult', 'ule',
+            'sgt', 'sge', 'slt', 'sle', 'oeq', 'ogt', 'oge', 'olt', 'ole',
+            'one', 'ord', 'ueq', 'une', 'uno', 'to', 'nuw', 'nsw', 'exact',
+            'volatile', 'atomic', 'unordered', 'monotonic', 'acquire', 'release',
+            'acq_rel', 'seq_cst', 'private', 'internal', 'external', 'weak',
+            'linkonce', 'common', 'appending', 'extern_weak', 'linkonce_odr',
+            'weak_odr', 'dllimport', 'dllexport', 'align', 'gc', 'null',
+            'undef', 'true', 'false', 'global', 'constant', 'entry'
+        ]
+        
+        # LLVM types
+        self.types = [
+            'void', 'i1', 'i8', 'i16', 'i32', 'i64', 'i128',
+            'float', 'double', 'x86_fp80', 'fp128', 'ppc_fp128',
+            'label', 'metadata', 'type', 'opaque'
+        ]
+    
+    def highlightBlock(self, text):
+        # Highlight keywords
+        for keyword in self.keywords:
+            import re
+            pattern = r'\b' + keyword + r'\b'
+            for match in re.finditer(pattern, text):
+                self.setFormat(match.start(), match.end() - match.start(), 
+                              self.keyword_format)
+        
+        # Highlight types
+        for type_word in self.types:
+            import re
+            pattern = r'\b' + type_word + r'\b'
+            for match in re.finditer(pattern, text):
+                self.setFormat(match.start(), match.end() - match.start(),
+                              self.type_format)
+        
+        # Highlight type patterns (i8*, [100 x i32], etc.)
+        import re
+        type_patterns = [
+            r'i\d+\*?',
+            r'\[\d+ x [^\]]+\]',
+            r'<\d+ x [^>]+>',
+        ]
+        for pattern in type_patterns:
+            for match in re.finditer(pattern, text):
+                self.setFormat(match.start(), match.end() - match.start(),
+                              self.type_format)
+        
+        # Highlight comments
+        import re
+        comment_pattern = r';[^\n]*'
+        for match in re.finditer(comment_pattern, text):
+            self.setFormat(match.start(), match.end() - match.start(),
+                          self.comment_format)
+        
+        # Highlight strings
+        import re
+        string_pattern = r'"[^"\\]*(\\.[^"\\]*)*"'
+        for match in re.finditer(string_pattern, text):
+            self.setFormat(match.start(), match.end() - match.start(),
+                          self.string_format)
+        
+        # Highlight numbers
+        import re
+        number_pattern = r'\b-?\d+\.?\d*\b'
+        for match in re.finditer(number_pattern, text):
+            self.setFormat(match.start(), match.end() - match.start(),
+                          self.number_format)
+        
+        # Highlight labels
+        import re
+        label_pattern = r'^\s*\w+:'
+        for match in re.finditer(label_pattern, text, re.MULTILINE):
+            self.setFormat(match.start(), match.end() - match.start(),
+                          self.label_format)
+        
+        # Highlight function definitions
+        import re
+        function_pattern = r'@\w+'
+        for match in re.finditer(function_pattern, text):
+            self.setFormat(match.start(), match.end() - match.start(),
+                          self.function_format)
 
 def PLUGIN_ENTRY():
     return IDA2LLVMPlugin()
@@ -59,6 +184,10 @@ class IDA2LLVMController(ida_kernwin.action_handler_t):
         from llvmlite import ir
         ida_kernwin.action_handler_t.__init__(self)
         self.current_address = None
+        self.cache = dict()
+        self.namecache = dict()  # address -> mangled name
+        self.config = dict()
+        self.m = ir.Module()
 
         class AddressHook(ida_kernwin.UI_Hooks):
             def __init__(self, controller):
@@ -66,7 +195,7 @@ class IDA2LLVMController(ida_kernwin.action_handler_t):
                 self.controller = controller
             def database_inited(self, is_new_database, idc_script):
                 self.controller.cache = dict()
-                self.controller.namecache = dict()
+                self.controller.namecache = dict()  # address -> mangled name
                 self.controller.config = dict()
                 self.controller.m = ir.Module()
             def screen_ea_changed(self, ea, prev_ea):
@@ -139,6 +268,8 @@ class IDA2LLVMController(ida_kernwin.action_handler_t):
     def removeFromModule(self, func_name):
         from contextlib import suppress
         from llvmlite import ir
+        
+        # func_name is the mangled name from IDA
         with suppress(KeyError):
             old_func = self.m.globals[func_name]
             _m = ir.Module()
@@ -157,15 +288,17 @@ class IDA2LLVMController(ida_kernwin.action_handler_t):
         llvm_f = ida2llvm.function.lift_function(self.m, func_name, isDeclare)
 
         for f in self.m.functions:
-            f_name = f.name
+            f_name = f.name  # This is the mangled name from IDA
             f_ea = ida_name.get_name_ea(ida_idaapi.BADADDR, f_name)
             self.namecache[f_ea] = f_name
             self.config[f_ea] = f.is_declaration
             self.cache[f_ea] = str(f)
 
-            name = f"{hex(f_ea)}: {f_name}"
-            if not self.view.function_list.findItems(name, QtCore.Qt.MatchExactly):
-                self.view.function_list.addItem(name)
+            # Demangle name for display only
+            demangled_name, _ = ida2llvm._utils.demangle_name(f_name)
+            display_name = f"{hex(f_ea)}: {demangled_name}"
+            if not self.view.function_list.findItems(display_name, QtCore.Qt.MatchFlag.MatchExactly):
+                self.view.function_list.addItem(display_name)
 
         return str(llvm_f)
 
@@ -206,6 +339,15 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
 
     def create_code_view(self):
         self.code_view = QtWidgets.QTextEdit(self.widget)
+        # Enable line wrapping and read-only mode
+        self.code_view.setLineWrapMode(QtWidgets.QTextEdit.LineWrapMode.NoWrap)
+        self.code_view.setReadOnly(True)
+        # Set monospace font
+        font = QFont("Courier New", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self.code_view.setFont(font)
+        # Add syntax highlighter
+        self.highlighter = LLVMSyntaxHighlighter(self.code_view.document())
 
     def create_function_settings(self):
         self.isDeclare = QtWidgets.QCheckBox("Keep function as declare-only")
@@ -219,20 +361,40 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
 
     def create_function_list(self):
         controller = self.controller
+        
+        # Create search box for filtering
+        self.search_box = QtWidgets.QLineEdit(self.widget)
+        self.search_box.setPlaceholderText("Search functions...")
+        self.search_box.textChanged.connect(self.filter_function_list)
+        
         class FunctionListWidget(QtWidgets.QListWidget):
             def __init__(self, parent, *args, **kwargs):
                 super().__init__(parent, *args, **kwargs)
+                import ida2llvm
 
                 for address in controller.config:
-                    current_name = controller.resolveName(address)
-                    self.addItem(f"{hex(address)}: {current_name}")
+                    mangled_name = controller.resolveName(address)
+                    demangled_name, _ = ida2llvm._utils.demangle_name(mangled_name)
+                    is_declare = controller.config[address]
+                    item = QtWidgets.QListWidgetItem(f"{hex(address)}: {demangled_name}")
+                    # Add icon to indicate declare vs defined
+                    if is_declare:
+                        item.setForeground(QColor(150, 150, 150))  # Gray for declarations
+                        item.setToolTip("Declaration only")
+                    else:
+                        item.setForeground(QColor(0, 128, 0))  # Green for definitions
+                        item.setToolTip("Fully defined")
+                    self.addItem(item)
+                    
             def keyPressEvent(self, event):
-                if event.key() == QtCore.Qt.Key_Delete:
+                if event.key() == QtCore.Qt.Key.Key_Delete:
                     row = self.currentRow()
                     item = self.takeItem(row)
-                    address, name = item.text().split(": ", maxsplit=1)
+                    address, demangled_name = item.text().split(": ", maxsplit=1)
                     address = int(address, 16)
-                    controller.removeFromModule(name)
+                    # Get the mangled name from our cache to remove from module
+                    mangled_name = controller.namecache[address]
+                    controller.removeFromModule(mangled_name)
                     del controller.cache[address]
                     del controller.namecache[address]
                     del controller.config[address]
@@ -242,6 +404,15 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
         self.function_list = FunctionListWidget(self.widget)
         self.function_list.setSortingEnabled(True)
         self.function_list.currentTextChanged.connect(self.controller.updateFunctionSelected)
+        
+    def filter_function_list(self, text):
+        """Filter function list based on search text."""
+        for i in range(self.function_list.count()):
+            item = self.function_list.item(i)
+            if text.lower() in item.text().lower():
+                item.setHidden(False)
+            else:
+                item.setHidden(True)
 
     def OnCreate(self, form):
         self._twidget = self.GetWidget()
@@ -251,6 +422,10 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
         self.curr_ea_button         = QtWidgets.QPushButton("Add function at current address", self.widget)
         self.all_functions_button   = QtWidgets.QPushButton("Add all IDA-defined functions", self.widget)
         self.lift_button            = QtWidgets.QPushButton("Lift and save to file", self.widget)
+        
+        # Add progress bar
+        self.progress_bar = QtWidgets.QProgressBar(self.widget)
+        self.progress_bar.setVisible(False)
 
         self.curr_ea_button.clicked.connect(self.controller.insertFunctionAtScreenEa)
         self.all_functions_button.clicked.connect(self.controller.insertAllFunctions)
@@ -261,12 +436,14 @@ class IDA2LLVMView(ida_kernwin.PluginForm):
         self.create_function_list()
 
         # arrange the widgets in a 'grid'         row  col  row span  col span
-        layout.addWidget(self.code_view,            0,   0,        0,        1)
-        layout.addWidget(self.function_list,        0,   1,        1,        1)
-        layout.addWidget(self.lifting_settings,     1,   1,        1,        1)
-        layout.addWidget(self.curr_ea_button,       2,   1,        1,        1)
-        layout.addWidget(self.all_functions_button, 3,   1,        1,        1)
-        layout.addWidget(self.lift_button,          4,   1,        1,        1)
+        layout.addWidget(self.code_view,            0,   0,        5,        1)
+        layout.addWidget(self.search_box,           0,   1,        1,        1)
+        layout.addWidget(self.function_list,        1,   1,        1,        1)
+        layout.addWidget(self.lifting_settings,     2,   1,        1,        1)
+        layout.addWidget(self.curr_ea_button,       3,   1,        1,        1)
+        layout.addWidget(self.all_functions_button, 4,   1,        1,        1)
+        layout.addWidget(self.progress_bar,         5,   1,        1,        1)
+        layout.addWidget(self.lift_button,          6,   1,        1,        1)
 
         self.widget.setLayout(layout)
         self.created = True

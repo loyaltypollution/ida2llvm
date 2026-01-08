@@ -1,4 +1,5 @@
 import ida_typeinf
+import ida_ida
 import ida_idaapi
 import logging
 
@@ -84,7 +85,7 @@ def lift_tif(tif: ida_typeinf.tinfo_t) -> ir.Type:
             byte_size = tif.get_size()
             # naieve assumption that system is either 32 bit or 64 bit
             bitness = 32
-            if ida_idaapi.get_inf_structure().is_64bit():
+            if ida_ida.inf_is_64bit():
                 bitness = 64
             if byte_size == (1 << bitness) - 1:
                 byte_size = 1
