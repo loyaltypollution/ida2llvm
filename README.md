@@ -18,7 +18,7 @@ Because I was curious, "can Hexrays decompilation be hijacked for LLVM lifting"?
 | [pytest](https://pypi.org/project/pytest/)** | 7.4.3 |
 | [IDA Pro](https://www.hex-rays.com/products/ida) | 7.7+ |
 
-*llvmlite 0.39.1 does not have official wheels for Python 3.11+; check here for [unoffical wheels](https://github.com/Windows81/LLVMlite-0.39.1-Win64/releases)
+*llvmlite 0.39.1 does not have official wheels for Python 3.11+; check for [unoffical wheels](https://github.com/Windows81/LLVMlite-0.39.1-Win64/releases)
 
 **only needed for unittests
 
